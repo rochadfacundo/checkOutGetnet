@@ -1,6 +1,6 @@
-# Módulo de Pago
+# Módulo de Pago checkOut
 
-Este módulo se encarga de integrar el sistema con la pasarela de pagos **Getnet** para procesar pagos online.  
+Este módulo se encarga de integrar el checkout de la pasarela de pagos **Getnet** para procesar pagos online.  
 Su función principal es:
 
 - Generar la orden de pago en Getnet.
