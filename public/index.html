@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Prueba Getnet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://www.pre.globalgetnet.com/digital-checkout/loader.js"></script>
+</head>
+<body>
+  <h1>Checkout Getnet (PRE)</h1>
+
+  <label>Monto (ARS): <input id="amount" type="number" value="1000" min="10" step="1" /></label>
+  <button id="btn">Pagar</button>
+
+  <div id="checkout-container" style="margin-top:20px; min-height: 540px;"></div>
+
+  <script>
+    const API_BASE = location.origin; // si el front queda en el mismo host PHP
+    // Si front en Netlify y backend en PHP aparte:
+    // const API_BASE = "https://tu-backend.ejemplo.com"; 
+  
+    async function crearIntent(amount) {
+      const orderId = 'ORD-' + Date.now();
+      const r = await fetch(`${API_BASE}/api/getnet/intent.php`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ amount: Number(amount), orderId })
+      });
+      const text = await r.text();
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${text}`);
+      try { return JSON.parse(text); } catch(e) { throw new Error(`JSON inválido: ${text}`); }
+    }
+  
+    async function getAccessToken() {
+      const r = await fetch(`${API_BASE}/api/getnet/token.php`);
+      const j = await r.json();
+      if (!r.ok || !j.access_token) throw new Error('Error token');
+      return j.access_token;
+    }
+  
+    document.getElementById('btn').addEventListener('click', async () => {
+      try {
+        const amount = document.getElementById('amount').value || 1000;
+        const [token, intent] = await Promise.all([getAccessToken(), crearIntent(amount)]);
+  
+        console.log('Intent response:', intent);
+  
+        // 1) Si la API te devuelve una URL de pago (redirect)
+        const link = intent.payment_link || intent.redirectUrl || intent.redirect_url || intent.url;
+
+        if (link) {
+          window.location.href = link;
+          return;
+        }
+  
+        // 2) Si carga por loader (iframe/lightbox)
+        if (window.GetnetCheckout && typeof window.GetnetCheckout.load === 'function') {
+          const paymentIntentId = intent.id || intent.payment_id || intent.paymentIntentId;
+          if (!paymentIntentId) throw new Error('No se encontró paymentIntentId en la respuesta');
+          window.GetnetCheckout.load({
+            authorization: `Bearer ${token}`,
+            // nombre de campo puede variar según SDK: probamos estándar
+            paymentIntentId,
+            checkoutType: 'iframe',
+            containerId: 'checkout-container'
+          });
+          return;
+        }
+  
+        alert('La respuesta no trae link ni podemos cargar loader. Revisá la respuesta en la consola.');
+      } catch (e) {
+        console.error(e);
+        alert('Error: ' + e.message);
+      }
+    });
+  </script>
+  
+</body>
+</html>

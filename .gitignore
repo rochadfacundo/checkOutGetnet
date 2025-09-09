@@ -1,0 +1,21 @@
+# Configuración sensible
+/config/config.php
+/.env
+
+# Logs
+*.log
+/public/webhooks/getnet_webhook_log.txt
+
+# Archivos temporales / cache
+/var/
+/tmp/
+/cache/
+/vendor/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Configuración de IDE/Editor
+.vscode/
+.idea/
