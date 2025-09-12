@@ -19,3 +19,6 @@ Thumbs.db
 # Configuración de IDE/Editor
 .vscode/
 .idea/
+
+# aws pem
+aws-key.pem
