@@ -14,6 +14,7 @@ try {
     $raw = file_get_contents('php://input');
     log_debug("RAW body: " . $raw);
     $body = json_decode($raw, true) ?: [];
+
     $amount  = $body['amount']  ?? null;
     $orderId = $body['orderId'] ?? null;
 
@@ -21,19 +22,19 @@ try {
         throw new Exception("Faltan amount / orderId");
     }
 
-    // 2) Token por cURL
-    $tokenEndpoint = 'http://3.149.136.15/motorasistant/api/getnet/token.php';
-
+    // 2) Obtener token
+    $tokenEndpoint = 'http://3.149.136.15:8080/api/getnet/token.php';
     $ch = curl_init($tokenEndpoint);
     curl_setopt_array($ch, [
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_TIMEOUT => 30,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 30,
     ]);
     $response = curl_exec($ch);
     if ($response === false) {
         throw new Exception("Error cURL token: " . curl_error($ch));
     }
     curl_close($ch);
+
     log_debug("Token response: " . $response);
     $tokenJson = json_decode($response, true);
     if (!isset($tokenJson['access_token'])) {
@@ -41,29 +42,48 @@ try {
     }
     $accessToken = $tokenJson['access_token'];
 
-    // 3) Crear intent
+    // 3) Crear intent con todos los campos requeridos
     $url = 'https://api.pre.globalgetnet.com/digital-checkout/v1/payment-intent';
     $payload = [
-      "payment" => [
-        "amount"   => $amount,
-        "currency" => "ARS",
-        "brand"    => "VISA"
-      ],
-      "order" => [
-        "id"          => (string)$orderId,
-        "description" => "Compra en Averia Motor SRL"
-      ]
+        "payment" => [
+            "amount"   => (int)$amount,
+            "currency" => "ARS",
+            "brand"    => "VISA"
+        ],
+        "order" => [
+            "id"          => (string)$orderId,
+            "description" => "Compra en Averia Motor SRL"
+        ],
+        "product" => [
+            [
+                "code"     => "001",
+                "name"     => "Seguro de Auto",
+                "title"    => "Póliza básica",
+                "value"    => (int)$amount,  // usamos el mismo monto
+                "quantity" => 1
+            ]
+        ],
+        "customer" => [
+            "customer_id"     => "123",
+            "first_name"      => "Juan",
+            "last_name"       => "Pérez",
+            "name"            => "Juan Pérez",   // campo combinado
+            "email"           => "juan.perez@example.com",
+            "document_type"   => "dni",          // válido: rfc, cpf, cnpj, dni, rut
+            "document_number" => "12345678"
+        ]
     ];
+
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-      CURLOPT_POST => true,
-      CURLOPT_RETURNTRANSFER => true,
-      CURLOPT_HTTPHEADER => [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $accessToken,
-      ],
-      CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
-      CURLOPT_TIMEOUT => 30,
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $accessToken,
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_TIMEOUT => 30,
     ]);
     $res = curl_exec($ch);
     if ($res === false) {
@@ -71,8 +91,8 @@ try {
     }
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    log_debug("Intent response ($code): " . $res);
 
+    log_debug("Intent response ($code): " . $res);
     http_response_code($code);
     echo $res;
 

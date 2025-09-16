@@ -1,12 +1,15 @@
 <?php
-// Config (ruta absoluta para evitar problemas con ../)
-$config = require '/home/ubuntu/motorasistant/config/config.php';
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-// --- Autenticación esperada ---
-$expected_user = $config['GETNET_WEBHOOK_USER'] ?? '';
-$expected_pass = $config['GETNET_WEBHOOK_PASS'] ?? '';
+header('Content-Type: application/json; charset=utf-8');
 
-// Detectar credenciales de distintas formas (según servidor/proxy)
+// --- Credenciales esperadas (hardcode) ---
+$expected_user = ''; //completar
+$expected_pass = '';
+
+// --- Autenticación ---
 $user = null;
 $pass = null;
 
@@ -14,7 +17,6 @@ if (isset($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'])) {
     $user = $_SERVER['PHP_AUTH_USER'];
     $pass = $_SERVER['PHP_AUTH_PW'];
 } elseif (isset($_SERVER['HTTP_AUTHORIZATION'])) {
-    // Ejemplo: "Basic bW90b3Jhc2lzdGFudDpNb3RvckFzaXN0YW50MjAyNw=="
     $auth = $_SERVER['HTTP_AUTHORIZATION'];
     if (stripos($auth, 'basic ') === 0) {
         $decoded = base64_decode(substr($auth, 6));
@@ -30,59 +32,53 @@ if ($user !== $expected_user || $pass !== $expected_pass) {
     exit;
 }
 
-// --- Leer el cuerpo del webhook ---
+// --- Leer cuerpo del webhook ---
 $input = file_get_contents('php://input');
 $data  = json_decode($input, true);
 
-// --- Logs fuera de public ---
-$logDir = '/home/ubuntu/motorasistant/logs';
-if (!is_dir($logDir)) {
-    mkdir($logDir, 0755, true);
+// --- Directorio de almacenamiento ---
+$storageDir = __DIR__ . '/../var';
+if (!is_dir($storageDir)) {
+    mkdir($storageDir, 0755, true);
 }
 
 if ($data) {
-    // Guardar último pago para debug
-    $lastPaymentPath = $logDir . '/last_payment.json';
-    file_put_contents($lastPaymentPath, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    // Archivo JSON acumulativo
+    $jsonFile = $storageDir . '/pagos_getnet.json';
+    $pagos = [];
 
-    // Log histórico
-    $logLine = date('Y-m-d H:i:s') . " - " . $input . PHP_EOL;
-    file_put_contents($logDir . '/getnet_webhook_log.txt', $logLine, FILE_APPEND);
-
-    // Actualizar en DB remota (InfinityFree)
-    if (isset($data['payment_intent_id'], $data['status'])) {
-        $intentId  = $data['payment_intent_id'];
-        $status    = $data['status'];
-        $paymentId = $data['payment_id'] ?? null;
-
-        try {
-            $pdo = new PDO(
-                "mysql:host=sql101.infinityfree.com;dbname=if0_39760207_motorasistant;charset=utf8",
-                "if0_39760207",
-                "Lobo7414",
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-            );
-
-            $stmt = $pdo->prepare("
-                UPDATE pagosGetnet
-                SET status = :status, payment_id = :payment_id
-                WHERE payment_intent_id = :intent_id
-            ");
-            $stmt->execute([
-                ':intent_id'  => $intentId,
-                ':status'     => $status,
-                ':payment_id' => $paymentId
-            ]);
-
-            $rowCount = $stmt->rowCount();
-            error_log("UPDATE pagosGetnet rows=$rowCount para intent_id=$intentId");
-
-        } catch (Exception $e) {
-            error_log("❌ Error actualizando pago en DB remota: " . $e->getMessage());
-        }
+    if (file_exists($jsonFile)) {
+        $pagos = json_decode(file_get_contents($jsonFile), true) ?: [];
     }
+
+    // Extraer datos clave
+    $registro = [
+        "fecha"             => date('Y-m-d H:i:s'),
+        "payment_intent_id" => $data['payment_intent_id'] ?? null,
+        "payment_id"        => $data['payment']['result']['payment_id'] ?? null,
+        "status"            => $data['payment']['result']['status'] ?? null,
+        "amount"            => $data['payment']['amount'] ?? null,
+        "currency"          => $data['payment']['currency'] ?? null,
+        "brand"             => $data['payment']['brand'] ?? null,
+        "customer"          => $data['customer']['name'] ?? null,
+        "document"          => ($data['customer']['document_type'] ?? '') . " " . ($data['customer']['document_number'] ?? ''),
+        "raw"               => $data
+    ];
+
+    // Agregar al array
+    $pagos[] = $registro;
+
+    // Guardar JSON formateado
+    file_put_contents($jsonFile, json_encode($pagos, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+    // Guardar log histórico simple
+    file_put_contents(
+        $storageDir . '/webhook_debug.log',
+        date('Y-m-d H:i:s') . " - Guardado pago intent={$registro['payment_intent_id']} status={$registro['status']} payment_id={$registro['payment_id']}" . PHP_EOL,
+        FILE_APPEND
+    );
 }
 
-// Responder a Getnet
+// --- Responder siempre ---
 http_response_code(200);
 echo json_encode(["status" => "received"]);

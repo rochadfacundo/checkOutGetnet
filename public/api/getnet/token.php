@@ -20,11 +20,10 @@ try {
     }
 
     // Preparar request
-    
-    $url = 'https://api.pre.globalgetnet.com/authentication/oauth2/access_token';  // ✅ ESTA LÍNEA DEBE ESTAR ASÍ
+
+    $url = 'https://api.pre.globalgetnet.com/authentication/oauth2/access_token';
 
     $payload = http_build_query([
-        'scope'         => 'oob',
         'grant_type'    => 'client_credentials',
         'client_id'     => $client_id,
         'client_secret' => $client_secret
