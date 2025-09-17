@@ -4,7 +4,8 @@ header('Content-Type: application/json; charset=utf-8');
 
 try {
     // 📌 Cargar config
-    $configPath = '/home/ubuntu/motorasistant/config/config.php';
+    $configPath = __DIR__ . '/../../../config/config.php';
+
     if (!file_exists($configPath)) {
         throw new Exception('No se encontró el archivo de configuración.');
     }
@@ -25,10 +26,10 @@ try {
 
     // 📌 1. Obtener token de acceso
     $urlToken = 'https://api.pre.globalgetnet.com/authentication/oauth2/access_token';
+
     $payload = http_build_query([
-        'scope' => 'oob',
-        'grant_type' => 'client_credentials',
-        'client_id' => $client_id,
+        'grant_type'    => 'client_credentials',
+        'client_id'     => $client_id,
         'client_secret' => $client_secret,
     ]);
 
@@ -36,6 +37,9 @@ try {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Content-Type: application/x-www-form-urlencoded"
+    ]);
     $response = curl_exec($ch);
 
     if ($response === false) {
@@ -46,12 +50,12 @@ try {
     curl_close($ch);
 
     if (!isset($tokenData['access_token'])) {
-        throw new Exception('No se pudo obtener access_token.');
+        throw new Exception('No se pudo obtener access_token. Respuesta: ' . $response);
     }
     $access_token = $tokenData['access_token'];
 
     // 📌 2. Ejecutar cancelación
-    $urlCancel = "https://api.pre.globalgetnet.com/digital-checkout/v1/payments/{$payment_id}/cancel";
+    $urlCancel = "https://api.pre.globalgetnet.com/digital-checkout/v1/payments/{$payment_id}/cancellation";
     $cancelPayload = json_encode([
         "reason" => "Cancelación prueba <24h"
     ]);
@@ -76,7 +80,7 @@ try {
 } catch (Exception $e) {
     http_response_code(400);
     echo json_encode([
-        "error" => "Error cancel",
+        "error"   => "Error cancel",
         "message" => $e->getMessage()
     ]);
 }

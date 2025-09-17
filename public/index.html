@@ -9,16 +9,30 @@
 <body>
   <h1>Checkout Getnet (PRE)</h1>
 
+  <!-- Crear Intento de Pago -->
   <label>Monto (ARS): 
     <input id="amount" type="number" value="1000" min="10" step="1" />
   </label>
   <button id="btn">Pagar</button>
 
   <br><br>
+
+  <!-- Cancelación -->
   <label>Cancelar pago (payment_id):
     <input id="cancelId" type="text" placeholder="Ingresá payment_id" style="width:400px;" />
   </label>
   <button id="btnCancel">Cancelar</button>
+
+  <br><br>
+
+  <!-- Refund -->
+  <label>Devolución (payment_id):
+    <input id="refundId" type="text" placeholder="Ingresá payment_id" style="width:400px;" />
+  </label>
+  <label>Monto (centavos):
+    <input id="refundAmount" type="number" placeholder="Ej: 10000 para $100" style="width:200px;" />
+  </label>
+  <button id="btnRefund">Refund</button>
 
   <div id="checkout-container" style="margin-top:20px; min-height: 540px;"></div>
   <pre id="debug" style="margin-top:20px; background:#eee; padding:10px;"></pre>
@@ -45,18 +59,13 @@
       return j.access_token;
     }
 
+    // 👉 Pago
     document.getElementById('btn').addEventListener('click', async () => {
       try {
         const amount = document.getElementById('amount').value || 1000;
-        console.log("trayendo token");
         const token = await getAccessToken();
-        console.log("intento intent");
         const intent = await crearIntent(amount);
-        
-        // 🔹 Mostrar en consola
-        console.log("Respuesta completa de intent:", intent);
 
-        // 🔹 Mostrar en pantalla también
         document.getElementById("debug").textContent = JSON.stringify(intent, null, 2);
 
         const paymentIntentId = intent.id || intent.payment_intent_id || intent.paymentId;
@@ -66,7 +75,6 @@
 
         const link = intent.payment_link || intent.redirectUrl || intent.redirect_url || intent.url;
         if (link) {
-          console.log("Redirigiendo en 5 segundos a:", link);
           setTimeout(() => { window.location.href = link; }, 5000);
           return;
         }
@@ -79,17 +87,14 @@
             checkoutType: 'iframe',
             containerId: 'checkout-container'
           });
-          return;
         }
-
-        alert('La respuesta no trae link ni podemos cargar loader. Revisá la consola.');
       } catch (e) {
         console.error(e);
         alert('Error: ' + e.message);
       }
     });
 
-    // 🔹 Cancelar pago
+    // 👉 Cancelar
     document.getElementById('btnCancel').addEventListener('click', async () => {
       const pid = document.getElementById('cancelId').value.trim();
       if (!pid) {
@@ -102,6 +107,23 @@
         document.getElementById("debug").textContent = "Cancel response:\n" + text;
       } catch (e) {
         alert("Error cancelando: " + e.message);
+      }
+    });
+
+    // 👉 Refund
+    document.getElementById('btnRefund').addEventListener('click', async () => {
+      const pid = document.getElementById('refundId').value.trim();
+      const amount = document.getElementById('refundAmount').value.trim();
+      if (!pid || !amount) {
+        alert("Ingresá payment_id y amount para refund.");
+        return;
+      }
+      try {
+        const r = await fetch(`${API_BASE}/api/getnet/refund.php?payment_id=${encodeURIComponent(pid)}&amount=${encodeURIComponent(amount)}`);
+        const text = await r.text();
+        document.getElementById("debug").textContent = "Refund response:\n" + text;
+      } catch (e) {
+        alert("Error en refund: " + e.message);
       }
     });
   </script>

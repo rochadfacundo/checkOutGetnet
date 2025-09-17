@@ -3,7 +3,7 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 
 try {
-    // Cargar config
+    // Config
     $configPath = __DIR__ . '/../../../config/config.php';
     if (!file_exists($configPath)) {
         throw new Exception('No se encontró el archivo de configuración.');
@@ -17,7 +17,7 @@ try {
         throw new Exception('Faltan credenciales de Getnet.');
     }
 
-    // Parámetros recibidos (puedes pasarlos por POST o GET)
+    // Parámetros
     $payment_id = $_POST['payment_id'] ?? $_GET['payment_id'] ?? null;
     $amount     = $_POST['amount'] ?? $_GET['amount'] ?? null;
 
@@ -25,10 +25,9 @@ try {
         throw new Exception('Faltan parámetros: payment_id y amount.');
     }
 
-    // 1. Obtener token de acceso
-    $urlToken = 'https://auth.use1.preprod.getnet.com.br/auth/oauth/v2/token';
+    // 1. Token
+    $urlToken = 'https://api.pre.globalgetnet.com/authentication/oauth2/access_token';
     $payload = http_build_query([
-        'scope' => 'oob',
         'grant_type' => 'client_credentials',
         'client_id' => $client_id,
         'client_secret' => $client_secret,
@@ -39,11 +38,9 @@ try {
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
     $response = curl_exec($ch);
-
     if ($response === false) {
         throw new Exception('Error al obtener token: ' . curl_error($ch));
     }
-
     $tokenData = json_decode($response, true);
     curl_close($ch);
 
@@ -52,12 +49,10 @@ try {
     }
     $access_token = $tokenData['access_token'];
 
-    // 2. Ejecutar devolución
-    $urlRefund = "https://api-mtls.preprod.getnet.com.br/v1/payments/{$payment_id}/refunds";
+    // 2. Refund
+    $urlRefund = "https://api.pre.globalgetnet.com/digital-checkout/v1/payments/{$payment_id}/refund";
     $refundPayload = json_encode([
-        "amount" => (int)$amount,
-        "currency" => "ARS",
-        "reason" => "Devolución prueba D+1"
+        "amount" => (int)$amount
     ]);
 
     $ch = curl_init($urlRefund);
@@ -68,7 +63,6 @@ try {
         "Content-Type: application/json",
         "Authorization: Bearer {$access_token}"
     ]);
-
     $refundResponse = curl_exec($ch);
     if ($refundResponse === false) {
         throw new Exception('Error en refund: ' . curl_error($ch));
