@@ -1,0 +1,4 @@
+# Bloquear acceso a .env y otros archivos ocultos
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>

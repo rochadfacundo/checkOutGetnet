@@ -1,33 +1,53 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+declare(strict_types=1);
+ini_set('display_errors', 0); // ocultar warnings/notices
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+header('Content-Type: application/json; charset=utf-8');
 
-function log_debug($msg) {
-    file_put_contents(__DIR__ . "/intent_error.log", date("Y-m-d H:i:s") . " - " . $msg . PHP_EOL, FILE_APPEND);
-}
+require_once __DIR__ . '/../../vendor/autoload.php';
+
+use Dotenv\Dotenv;
 
 header('Content-Type: application/json; charset=utf-8');
 
+// 🔹 Guardar logs en var/
+function log_debug($msg): void {
+    $logFile = __DIR__ . "/../../var/intent_error.log";
+    file_put_contents($logFile, date("Y-m-d H:i:s") . " - " . $msg . PHP_EOL, FILE_APPEND);
+}
+
 try {
-    // 1) Leer body JSON
+    // 1) Cargar variables de entorno
+    $dotenv = Dotenv::createImmutable(__DIR__ . '/../../');
+    $dotenv->load();
+
+    $urlIntent = $_ENV['URL_INTENT'] ?? null;
+    if (!$urlIntent) {
+        throw new Exception("Falta URL_INTENT en .env");
+    }
+
+    // 2) Leer body JSON
     $raw = file_get_contents('php://input');
     log_debug("RAW body: " . $raw);
+
+    log_debug("Respuesta cruda Getnet: " . $res);
+
     $body = json_decode($raw, true) ?: [];
 
     $amount  = $body['amount']  ?? null;
     $orderId = $body['orderId'] ?? null;
+    $customer = $body['customer'] ?? [];
 
     if ($amount === null || $orderId === null) {
         throw new Exception("Faltan amount / orderId");
     }
 
-    // 2) Obtener token
-    $tokenEndpoint = 'http://3.149.136.15:8080/api/getnet/token.php';
+    // 3) Obtener token desde token.php local
+    $tokenEndpoint = $_SERVER['REQUEST_SCHEME'] . "://" . $_SERVER['HTTP_HOST'] . "/getnet/public/getnet/token.php";
     $ch = curl_init($tokenEndpoint);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT        => 15,
     ]);
     $response = curl_exec($ch);
     if ($response === false) {
@@ -35,15 +55,13 @@ try {
     }
     curl_close($ch);
 
-    log_debug("Token response: " . $response);
     $tokenJson = json_decode($response, true);
     if (!isset($tokenJson['access_token'])) {
         throw new Exception("No se pudo obtener access_token");
     }
     $accessToken = $tokenJson['access_token'];
 
-    // 3) Crear intent con todos los campos requeridos
-    $url = 'https://api.pre.globalgetnet.com/digital-checkout/v1/payment-intent';
+    // 4) Crear intent
     $payload = [
         "payment" => [
             "amount"   => (int)$amount,
@@ -59,31 +77,32 @@ try {
                 "code"     => "001",
                 "name"     => "Seguro de Auto",
                 "title"    => "Póliza básica",
-                "value"    => (int)$amount,  // usamos el mismo monto
+                "value"    => (int)$amount,
                 "quantity" => 1
             ]
         ],
         "customer" => [
             "customer_id"     => "123",
-            "first_name"      => "Juan",
-            "last_name"       => "Pérez",
-            "name"            => "Juan Pérez",   // campo combinado
-            "email"           => "juan.perez@example.com",
-            "document_type"   => "dni",          // válido: rfc, cpf, cnpj, dni, rut
-            "document_number" => "12345678"
+            "first_name"      => $customer['first_name'] ?? "N/A",
+            "last_name"       => $customer['last_name'] ?? "N/A",
+            "name"            => trim(($customer['first_name'] ?? "") . " " . ($customer['last_name'] ?? "")),
+            "email"           => $customer['email'] ?? "N/A",
+            "document_type"   => $customer['document_type'] ?? "dni",
+            "document_number" => $customer['document_number'] ?? "0",
+            "phone_number"    => $customer['telefono'] ?? null
         ]
     ];
 
-    $ch = curl_init($url);
+    $ch = curl_init($urlIntent);
     curl_setopt_array($ch, [
-        CURLOPT_POST => true,
+        CURLOPT_POST        => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
+        CURLOPT_HTTPHEADER  => [
             'Content-Type: application/json',
             'Authorization: Bearer ' . $accessToken,
         ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_POSTFIELDS  => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_TIMEOUT     => 30,
     ]);
     $res = curl_exec($ch);
     if ($res === false) {

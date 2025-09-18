@@ -1,6 +1,7 @@
 # Configuración sensible
 /config/config.php
 /.env
+/.env.test
 
 # Logs
 *.log

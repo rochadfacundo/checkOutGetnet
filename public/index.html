@@ -9,13 +9,22 @@
 <body>
   <h1>Checkout Getnet (PRE)</h1>
 
-  <!-- Crear Intento de Pago -->
+  <!-- Formulario Cliente -->
+  <h3>Datos del Cliente</h3>
+  <label>Nombre: <input id="first_name" type="text" value="Facundo" required /></label><br>
+  <label>Apellido: <input id="last_name" type="text" value="Rocha" required /></label><br>
+  <label>Email: <input id="email" type="email" value="facu@test.com" required /></label><br>
+  <label>Teléfono: <input id="telefono" type="text" value="1122334455" /></label><br>
+  <label>Documento (DNI): <input id="dni" type="text" value="36904411" required /></label><br>
+
+  <br>
+  <!-- Monto -->
   <label>Monto (ARS): 
     <input id="amount" type="number" value="1000" min="10" step="1" />
   </label>
   <button id="btn">Pagar</button>
 
-  <br><br>
+  <hr>
 
   <!-- Cancelación -->
   <label>Cancelar pago (payment_id):
@@ -42,18 +51,31 @@
 
     async function crearIntent(amount) {
       const orderId = 'ORD-' + Date.now();
-      const r = await fetch(`${API_BASE}/api/getnet/intent.php`, {
+
+      // 👉 Armar objeto con datos del cliente
+      const customer = {
+        first_name: document.getElementById('first_name').value,
+        last_name: document.getElementById('last_name').value,
+        email: document.getElementById('email').value,
+        telefono: document.getElementById('telefono').value,
+        document_type: 'dni',
+        document_number: document.getElementById('dni').value
+      };
+
+      const r = await fetch(`${API_BASE}/getnet/public/getnet/intent.php`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ amount: Number(amount), orderId })
+        body: JSON.stringify({ amount: Number(amount), orderId, customer })
       });
-      const text = await r.text();
-      if (!r.ok) throw new Error(`HTTP ${r.status}: ${text}`);
-      try { return JSON.parse(text); } catch(e) { throw new Error(`JSON inválido: ${text}`); }
+
+      const j = await r.json();
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${JSON.stringify(j)}`);
+      return j;
+      
     }
 
     async function getAccessToken() {
-      const r = await fetch(`${API_BASE}/api/getnet/token.php`);
+      const r = await fetch(`${API_BASE}/getnet/public/getnet/token.php`);
       const j = await r.json();
       if (!r.ok || !j.access_token) throw new Error('Error token');
       return j.access_token;
@@ -75,7 +97,7 @@
 
         const link = intent.payment_link || intent.redirectUrl || intent.redirect_url || intent.url;
         if (link) {
-          setTimeout(() => { window.location.href = link; }, 5000);
+          setTimeout(() => { window.location.href = link; }, 3000);
           return;
         }
 
@@ -102,7 +124,7 @@
         return;
       }
       try {
-        const r = await fetch(`${API_BASE}/api/getnet/cancel.php?payment_id=${encodeURIComponent(pid)}`);
+        const r = await fetch(`${API_BASE}/getnet/public/getnet/cancel.php?payment_id=${encodeURIComponent(pid)}`);
         const text = await r.text();
         document.getElementById("debug").textContent = "Cancel response:\n" + text;
       } catch (e) {
@@ -119,7 +141,7 @@
         return;
       }
       try {
-        const r = await fetch(`${API_BASE}/api/getnet/refund.php?payment_id=${encodeURIComponent(pid)}&amount=${encodeURIComponent(amount)}`);
+        const r = await fetch(`${API_BASE}/getnet/public/getnet/refund.php?payment_id=${encodeURIComponent(pid)}&amount=${encodeURIComponent(amount)}`);
         const text = await r.text();
         document.getElementById("debug").textContent = "Refund response:\n" + text;
       } catch (e) {
